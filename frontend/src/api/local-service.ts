@@ -1,9 +1,14 @@
 import { MODULE_BY_KEY } from '@/data/modules'
 import { allRows, listRows, resetRows, saveRows } from '@/data/local-store'
+import { transition, transitionMortar } from '@/domain/grout'
 import type { ActionResult, EntryRow, ModuleMeta, OverviewResult, PageResult } from '@/data/types'
 
 // 会写进数据的「往回走」动作：命中就把这条记录标成异常态，看板上能一眼看出来。
 const NEGATIVE_ACTIONS = ['撤销', '作废', '拒绝', '驳回', '停用', '忽略', '下线', '回滚']
+
+// grouting / mortar 的动作收归补浆领域服务，保证越级拦截与同源落库。
+const DOMAIN_GROUT_ACTIONS = new Set(['开始注浆', '确认完成', '安排补浆'])
+const DOMAIN_MORTAR_ACTIONS = new Set(['开始拌制', '提交检验', '废弃批次'])
 
 export function moduleMeta(key: string): ModuleMeta {
   const meta = MODULE_BY_KEY.get(key)
@@ -39,6 +44,32 @@ export function runAction(key: string, id: number, action: string): ActionResult
   if (index < 0) {
     return { ok: false, message: `没有找到编号为 ${id} 的${meta.entity}` }
   }
+
+  // 领域动作：编号取业务键（注浆编号/批次编号），状态规则由领域服务裁决。
+  if (key === 'grouting') {
+    if (!DOMAIN_GROUT_ACTIONS.has(action)) {
+      return { ok: false, message: `注浆记录的「${action}」请在补浆登记面板办理` }
+    }
+    if (action === '安排补浆') {
+      return { ok: false, message: '安排补浆必须选择待用浆液批次、补浆量与初凝时间，请使用行内「安排补浆」面板整笔登记' }
+    }
+    const groutNo = String(rows[index]['注浆编号'] ?? '')
+    const result = transition(groutNo, action as '开始注浆' | '确认完成')
+    return result.ok
+      ? { ok: true, message: `注浆记录已${action}，当前状态「${result.data.status}」` }
+      : { ok: false, message: result.reason }
+  }
+  if (key === 'mortar') {
+    if (!DOMAIN_MORTAR_ACTIONS.has(action)) {
+      return { ok: false, message: `浆液批次的「${action}」动作未登记` }
+    }
+    const batchNo = String(rows[index]['批次编号'] ?? '')
+    const result = transitionMortar(batchNo, action as '开始拌制' | '提交检验' | '废弃批次')
+    return result.ok
+      ? { ok: true, message: `浆液批次已${action}，当前状态「${result.data.status}」` }
+      : { ok: false, message: result.reason }
+  }
+
   const current = String(rows[index].status)
   if (current === target) {
     return { ok: false, message: `${meta.entity}已经是「${target}」，不用重复操作` }
