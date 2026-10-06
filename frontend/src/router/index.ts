@@ -5,6 +5,7 @@ const Shield = () => import('@/views/shield/index.vue')
 const Ring = () => import('@/views/ring/index.vue')
 const Segment = () => import('@/views/segment/index.vue')
 const Grouting = () => import('@/views/grouting/index.vue')
+const Regrout = () => import('@/views/regrout/index.vue')
 const Muck = () => import('@/views/muck/index.vue')
 const Settlement = () => import('@/views/settlement/index.vue')
 const Axis = () => import('@/views/axis/index.vue')
@@ -28,6 +29,7 @@ const router = createRouter({
     { path: '/ring', name: 'ring', component: Ring },
     { path: '/segment', name: 'segment', component: Segment },
     { path: '/grouting', name: 'grouting', component: Grouting },
+    { path: '/regrout', name: 'regrout', component: Regrout },
     { path: '/muck', name: 'muck', component: Muck },
     { path: '/settlement', name: 'settlement', component: Settlement },
     { path: '/axis', name: 'axis', component: Axis },

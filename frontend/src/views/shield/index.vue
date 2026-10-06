@@ -2,12 +2,12 @@
   <section class="page" data-module="shield">
     <header class="page-head">
       <div>
-        <h2>盾构机台账管理</h2>
-        <p class="page-desc">维护盾构机，围绕盾构机编号、盾构机型号、开挖直径、刀盘形式做登记、筛选与状态流转。</p>
+        <h2>{{ meta.name }}管理</h2>
+        <p class="page-desc">{{ meta.desc }}</p>
       </div>
       <div class="page-actions">
-        <button class="btn primary" type="button" @click="openCreate">登记盾构机</button>
-        <button class="btn" type="button" @click="exportRows">导出盾构机台账清单</button>
+        <button class="btn primary" type="button" @click="openCreate">登记{{ meta.entity }}</button>
+        <button class="btn" type="button" @click="exportRows">导出{{ meta.name }}清单</button>
       </div>
     </header>
 
@@ -58,13 +58,13 @@
           </td>
         </tr>
         <tr v-if="!rows.length">
-          <td :colspan="columns.length + 2" class="empty-state">暂无盾构机台账数据，可先登记盾构机</td>
+          <td :colspan="columns.length + 2" class="empty-state">暂无{{ meta.name }}数据，可先登记{{ meta.entity }}</td>
         </tr>
       </tbody>
     </table>
 
     <footer class="page-foot">
-      <span>共 {{ total }} 条盾构机台账记录</span>
+      <span>共 {{ total }} 条{{ meta.name }}记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
   </section>
@@ -77,15 +77,17 @@ import {
   downloadEntries,
   listEntries,
   moduleMeta,
+  moduleStats,
   runAction as applyAction,
 } from '@/api/local-service'
 import type { EntryRow } from '@/data/types'
 
+// 行列、状态、动作、指标全部来自模块元数据：全站同源，不再各抄一份。
 const meta = moduleMeta('shield')
-const columns = ["盾构机编号", "盾构机型号", "开挖直径", "刀盘形式", "总推力", "进场日期", "维保单位", "设备状态"]
-const actions = ["办理进场", "开始调试", "办理退场"]
-const statuses = ["待进场", "调试中", "掘进中", "已退场"]
-const stats = [{"label": "在场盾构机", "value": 0}, {"label": "掘进中盾构机", "value": 0}, {"label": "待维保盾构机", "value": 0}]
+const columns = meta.fields
+const actions = meta.actions
+const statuses = meta.statuses
+const stats = ref<{ label: string; value: number }[]>([])
 
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
@@ -109,7 +111,7 @@ function exportRows() {
 }
 
 function openCreate() {
-  errorMessage.value = '盾构机登记入口尚未接入审批流'
+  errorMessage.value = `${meta.entity}登记入口尚未接入审批流`
 }
 
 function runAction(action: string, row: EntryRow) {
@@ -128,8 +130,13 @@ function reload() {
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
     total.value = payload.total
+    stats.value = moduleStats(meta.key)
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '盾构机台账列表读取失败'
+    // 取数失败按失败处理：清掉页面上的旧行，不拿上一轮的数据顶替。
+    rows.value = []
+    total.value = 0
+    stats.value = []
+    errorMessage.value = error instanceof Error ? error.message : `${meta.name}列表读取失败`
   }
 }
 

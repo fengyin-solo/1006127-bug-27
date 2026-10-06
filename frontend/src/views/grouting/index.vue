@@ -2,12 +2,12 @@
   <section class="page" data-module="grouting">
     <header class="page-head">
       <div>
-        <h2>同步注浆管理</h2>
-        <p class="page-desc">维护注浆记录，围绕注浆编号、对应环号、浆液配比、注浆量做登记、筛选与状态流转。</p>
+        <h2>{{ meta.name }}管理</h2>
+        <p class="page-desc">{{ meta.desc }}</p>
       </div>
       <div class="page-actions">
-        <button class="btn primary" type="button" @click="openCreate">登记注浆记录</button>
-        <button class="btn" type="button" @click="exportRows">导出同步注浆清单</button>
+        <button class="btn primary" type="button" @click="openCreate">登记{{ meta.entity }}</button>
+        <button class="btn" type="button" @click="exportRows">导出{{ meta.name }}清单</button>
       </div>
     </header>
 
@@ -58,15 +58,17 @@
           </td>
         </tr>
         <tr v-if="!rows.length">
-          <td :colspan="columns.length + 2" class="empty-state">暂无同步注浆数据，可先登记注浆记录</td>
+          <td :colspan="columns.length + 2" class="empty-state">暂无{{ meta.name }}数据，可先登记{{ meta.entity }}</td>
         </tr>
       </tbody>
     </table>
 
     <footer class="page-foot">
-      <span>共 {{ total }} 条同步注浆记录</span>
+      <span>共 {{ total }} 条{{ meta.name }}记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
+
+    <RegroutDialog v-if="dialogOpen" :prefill-code="prefillCode" @close="onDialogClose" />
   </section>
 </template>
 
@@ -77,20 +79,25 @@ import {
   downloadEntries,
   listEntries,
   moduleMeta,
+  moduleStats,
   runAction as applyAction,
 } from '@/api/local-service'
+import RegroutDialog from '@/components/RegroutDialog.vue'
 import type { EntryRow } from '@/data/types'
 
+// 行列、状态、动作、指标全部来自模块元数据：全站同源，不再各抄一份。
 const meta = moduleMeta('grouting')
-const columns = ["注浆编号", "对应环号", "浆液配比", "注浆量", "注浆压力", "初凝时间", "注浆班组", "注浆状态"]
-const actions = ["开始注浆", "确认完成", "安排补浆"]
-const statuses = ["待注浆", "注浆中", "已完成", "已补浆"]
-const stats = [{"label": "注浆总量", "value": 0}, {"label": "待补浆记录", "value": 0}, {"label": "平均注浆压力", "value": 0}]
+const columns = meta.fields
+const actions = meta.actions
+const statuses = meta.statuses
+const stats = ref<{ label: string; value: number }[]>([])
 
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
+const dialogOpen = ref(false)
+const prefillCode = ref('')
 const filterFields = columns.slice(0, 3)
 const statusSummary = computed(() =>
   statuses.map((status: string) => ({
@@ -109,11 +116,26 @@ function exportRows() {
 }
 
 function openCreate() {
-  errorMessage.value = '注浆记录登记入口尚未接入审批流'
+  errorMessage.value = `${meta.entity}登记入口尚未接入审批流`
+}
+
+function onDialogClose(registered: boolean) {
+  dialogOpen.value = false
+  if (registered) {
+    // 提交完再进一次列表复查，确认落库结果，不沿用提交时的旧值。
+    reload()
+  }
 }
 
 function runAction(action: string, row: EntryRow) {
   errorMessage.value = ''
+  // 安排补浆与补浆登记是同一笔事务：已确认完成的直接开登记窗口，
+  // 没走完注浆确认的交给状态机当场拦下。
+  if (action === '安排补浆' && row.status === '已完成') {
+    prefillCode.value = String(row['注浆编号'] ?? '')
+    dialogOpen.value = true
+    return
+  }
   const result = applyAction(meta.key, Number(row.id), action)
   if (!result.ok) {
     errorMessage.value = result.message
@@ -128,8 +150,13 @@ function reload() {
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
     total.value = payload.total
+    stats.value = moduleStats(meta.key)
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '同步注浆列表读取失败'
+    // 取数失败按失败处理：清掉页面上的旧行，不拿上一轮的数据顶替。
+    rows.value = []
+    total.value = 0
+    stats.value = []
+    errorMessage.value = error instanceof Error ? error.message : `${meta.name}列表读取失败`
   }
 }
 

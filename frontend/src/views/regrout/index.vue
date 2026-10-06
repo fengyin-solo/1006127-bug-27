@@ -1,5 +1,5 @@
 <template>
-  <section class="page" data-module="mortar">
+  <section class="page" data-module="regrout">
     <header class="page-head">
       <div>
         <h2>{{ meta.name }}管理</h2>
@@ -22,6 +22,7 @@
       <span v-for="item in statusSummary" :key="item.status" class="legend-item">
         {{ item.status }}：{{ item.count }}
       </span>
+      <span class="legend-item">待补浆批次（与浆液拌制待用批次同源）：{{ pendingBatches.length }}</span>
     </p>
 
     <form class="filter-bar" @submit.prevent="reload">
@@ -68,36 +69,7 @@
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
 
-    <section class="standby-panel">
-      <h3>补浆待用批次清单（与补浆记录页同源，共 {{ pendingBatches.length }} 批）</h3>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>批次编号</th>
-            <th>关联注浆编号</th>
-            <th>补浆编号</th>
-            <th>对应环号</th>
-            <th>补浆量</th>
-            <th>初凝时间</th>
-            <th>批次状态</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="item in pendingBatches" :key="item.注浆编号">
-            <td>{{ item.批次编号 }}</td>
-            <td>{{ item.注浆编号 }}</td>
-            <td>{{ item.补浆编号 }}</td>
-            <td>{{ item.对应环号 }}</td>
-            <td>{{ item.补浆量 }}</td>
-            <td>{{ item.初凝时间 }}</td>
-            <td>{{ item.批次状态 }}</td>
-          </tr>
-          <tr v-if="!pendingBatches.length">
-            <td colspan="7" class="empty-state">当前没有待补浆的待用批次</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
+    <RegroutDialog v-if="dialogOpen" @close="onDialogClose" />
   </section>
 </template>
 
@@ -106,16 +78,17 @@ import { computed, onMounted, ref } from 'vue'
 
 import {
   downloadEntries,
-  listEntries,
   listPendingRegroutBatches,
+  listRegroutEntries,
   moduleMeta,
   moduleStats,
   runAction as applyAction,
 } from '@/api/local-service'
+import RegroutDialog from '@/components/RegroutDialog.vue'
 import type { EntryRow, PendingRegroutBatch } from '@/data/types'
 
 // 行列、状态、动作、指标全部来自模块元数据：全站同源，不再各抄一份。
-const meta = moduleMeta('mortar')
+const meta = moduleMeta('regrout')
 const columns = meta.fields
 const actions = meta.actions
 const statuses = meta.statuses
@@ -125,6 +98,7 @@ const rows = ref<EntryRow[]>([])
 const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
+const dialogOpen = ref(false)
 const pendingBatches = ref<PendingRegroutBatch[]>([])
 const filterFields = columns.slice(0, 3)
 const statusSummary = computed(() =>
@@ -144,7 +118,15 @@ function exportRows() {
 }
 
 function openCreate() {
-  errorMessage.value = `${meta.entity}登记入口尚未接入审批流`
+  dialogOpen.value = true
+}
+
+function onDialogClose(registered: boolean) {
+  dialogOpen.value = false
+  if (registered) {
+    // 提交完再进一次列表复查，确认落库结果，不沿用提交时的旧值。
+    reload()
+  }
 }
 
 function runAction(action: string, row: EntryRow) {
@@ -160,7 +142,7 @@ function runAction(action: string, row: EntryRow) {
 function reload() {
   errorMessage.value = ''
   try {
-    const payload = listEntries(meta.key, filters.value)
+    const payload = listRegroutEntries(filters.value)
     rows.value = payload.items
     total.value = payload.total
     stats.value = moduleStats(meta.key)

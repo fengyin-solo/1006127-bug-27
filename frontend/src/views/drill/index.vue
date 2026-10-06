@@ -2,12 +2,12 @@
   <section class="page" data-module="drill">
     <header class="page-head">
       <div>
-        <h2>应急演练管理</h2>
-        <p class="page-desc">维护应急演练，围绕演练编号、演练科目、演练日期、参与班组做登记、筛选与状态流转。</p>
+        <h2>{{ meta.name }}管理</h2>
+        <p class="page-desc">{{ meta.desc }}</p>
       </div>
       <div class="page-actions">
-        <button class="btn primary" type="button" @click="openCreate">登记应急演练</button>
-        <button class="btn" type="button" @click="exportRows">导出应急演练清单</button>
+        <button class="btn primary" type="button" @click="openCreate">登记{{ meta.entity }}</button>
+        <button class="btn" type="button" @click="exportRows">导出{{ meta.name }}清单</button>
       </div>
     </header>
 
@@ -58,13 +58,13 @@
           </td>
         </tr>
         <tr v-if="!rows.length">
-          <td :colspan="columns.length + 2" class="empty-state">暂无应急演练数据，可先登记应急演练</td>
+          <td :colspan="columns.length + 2" class="empty-state">暂无{{ meta.name }}数据，可先登记{{ meta.entity }}</td>
         </tr>
       </tbody>
     </table>
 
     <footer class="page-foot">
-      <span>共 {{ total }} 条应急演练记录</span>
+      <span>共 {{ total }} 条{{ meta.name }}记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
   </section>
@@ -77,15 +77,17 @@ import {
   downloadEntries,
   listEntries,
   moduleMeta,
+  moduleStats,
   runAction as applyAction,
 } from '@/api/local-service'
 import type { EntryRow } from '@/data/types'
 
+// 行列、状态、动作、指标全部来自模块元数据：全站同源，不再各抄一份。
 const meta = moduleMeta('drill')
-const columns = ["演练编号", "演练科目", "演练日期", "参与班组", "演练时长", "发现问题", "整改措施", "演练状态"]
-const actions = ["提交方案", "确认完成", "登记整改"]
-const statuses = ["待策划", "已策划", "已完成", "已整改"]
-const stats = [{"label": "待策划演练", "value": 0}, {"label": "已完成演练", "value": 0}, {"label": "待整改问题", "value": 0}]
+const columns = meta.fields
+const actions = meta.actions
+const statuses = meta.statuses
+const stats = ref<{ label: string; value: number }[]>([])
 
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
@@ -109,7 +111,7 @@ function exportRows() {
 }
 
 function openCreate() {
-  errorMessage.value = '应急演练登记入口尚未接入审批流'
+  errorMessage.value = `${meta.entity}登记入口尚未接入审批流`
 }
 
 function runAction(action: string, row: EntryRow) {
@@ -128,8 +130,13 @@ function reload() {
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
     total.value = payload.total
+    stats.value = moduleStats(meta.key)
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '应急演练列表读取失败'
+    // 取数失败按失败处理：清掉页面上的旧行，不拿上一轮的数据顶替。
+    rows.value = []
+    total.value = 0
+    stats.value = []
+    errorMessage.value = error instanceof Error ? error.message : `${meta.name}列表读取失败`
   }
 }
 

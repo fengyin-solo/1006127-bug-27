@@ -2,12 +2,12 @@
   <section class="page" data-module="ring">
     <header class="page-head">
       <div>
-        <h2>掘进环次管理</h2>
-        <p class="page-desc">维护掘进环，围绕环号、起始里程、掘进速度、总推力做登记、筛选与状态流转。</p>
+        <h2>{{ meta.name }}管理</h2>
+        <p class="page-desc">{{ meta.desc }}</p>
       </div>
       <div class="page-actions">
-        <button class="btn primary" type="button" @click="openCreate">登记掘进环</button>
-        <button class="btn" type="button" @click="exportRows">导出掘进环次清单</button>
+        <button class="btn primary" type="button" @click="openCreate">登记{{ meta.entity }}</button>
+        <button class="btn" type="button" @click="exportRows">导出{{ meta.name }}清单</button>
       </div>
     </header>
 
@@ -58,13 +58,13 @@
           </td>
         </tr>
         <tr v-if="!rows.length">
-          <td :colspan="columns.length + 2" class="empty-state">暂无掘进环次数据，可先登记掘进环</td>
+          <td :colspan="columns.length + 2" class="empty-state">暂无{{ meta.name }}数据，可先登记{{ meta.entity }}</td>
         </tr>
       </tbody>
     </table>
 
     <footer class="page-foot">
-      <span>共 {{ total }} 条掘进环次记录</span>
+      <span>共 {{ total }} 条{{ meta.name }}记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
   </section>
@@ -77,15 +77,17 @@ import {
   downloadEntries,
   listEntries,
   moduleMeta,
+  moduleStats,
   runAction as applyAction,
 } from '@/api/local-service'
 import type { EntryRow } from '@/data/types'
 
+// 行列、状态、动作、指标全部来自模块元数据：全站同源，不再各抄一份。
 const meta = moduleMeta('ring')
-const columns = ["环号", "起始里程", "掘进速度", "总推力", "刀盘扭矩", "出土方量", "掘进班组", "环次状态"]
-const actions = ["开始掘进", "确认完成", "申请纠偏"]
-const statuses = ["待掘进", "掘进中", "已贯通", "已纠偏"]
-const stats = [{"label": "本月掘进环数", "value": 0}, {"label": "平均掘进速度", "value": 0}, {"label": "纠偏环数", "value": 0}]
+const columns = meta.fields
+const actions = meta.actions
+const statuses = meta.statuses
+const stats = ref<{ label: string; value: number }[]>([])
 
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
@@ -109,7 +111,7 @@ function exportRows() {
 }
 
 function openCreate() {
-  errorMessage.value = '掘进环登记入口尚未接入审批流'
+  errorMessage.value = `${meta.entity}登记入口尚未接入审批流`
 }
 
 function runAction(action: string, row: EntryRow) {
@@ -128,8 +130,13 @@ function reload() {
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
     total.value = payload.total
+    stats.value = moduleStats(meta.key)
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '掘进环次列表读取失败'
+    // 取数失败按失败处理：清掉页面上的旧行，不拿上一轮的数据顶替。
+    rows.value = []
+    total.value = 0
+    stats.value = []
+    errorMessage.value = error instanceof Error ? error.message : `${meta.name}列表读取失败`
   }
 }
 
